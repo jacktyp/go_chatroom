@@ -3,10 +3,9 @@ package process
 import (
 	"encoding/json"
 	"fmt"
-	utils "go_code/chatroom/client/util"
 	"go_code/chatroom/common/message"
 	"go_code/chatroom/server/model"
-	util "go_code/chatroom/server/utils"
+	"go_code/chatroom/server/utils"
 	"net"
 )
 
@@ -17,78 +16,60 @@ type UserProcess struct {
 	UserId int
 }
 
-//登录
-func (this *UserProcess) ServerProcessLogin(mes *message.Message) (err error) {
-	//反序列化logindata
-	var loginMes message.LoginMes
-	err = json.Unmarshal([]byte(mes.Data), &loginMes)
-	if err != nil {
-		fmt.Println("loginRes 反序列化失败")
-	}
+//通知所有在线的用户的方法
+func (this *UserProcess) NotifyOthersOnlineUser(userId int) {
 
-	//返回数据
-	var resMes message.Message
-	//类型
-	resMes.Type = message.LoginResMesType
-	var loginResMes message.LoginResMes
-
-	//登录校验
-	user, err := model.MyUserDao.Login(loginMes.UserId, loginMes.UserPwd)
-	if err != nil {
-		if err == model.ERROR_USER_NOTEXISTS {
-			loginResMes.Code = 500
-			loginResMes.Error = err.Error()
-		} else if err == model.ERROR_USER_PWD {
-			loginResMes.Code = 403
-			loginResMes.Error = err.Error()
-		} else {
-			loginResMes.Code = 505
-			loginResMes.Error = "服务器内部错误..."
+	//遍历 onlineUsers, 然后一个一个的发送 NotifyUserStatusMes
+	for id, up := range userMgr.onlineUsers {
+		//过滤到自己
+		if id == userId {
+			continue
 		}
-	} else {
-		loginResMes.Code = 200
-		//这里，因为用户登录成功，我们就把该登录成功的用放入到userMgr中
-		//将登录成功的用户的userId 赋给 this
-		this.UserId = loginMes.UserId
-		userMgr.AddOnlineUser(this)
-		//通知其它的在线用户， 我上线了
-		this.NotifyOthersOnlineUser(loginMes.UserId)
-		//将当前在线用户的id 放入到loginResMes.UsersId
-		//遍历 userMgr.onlineUsers
-		for id, _ := range userMgr.onlineUsers {
-			loginResMes.UsersId = append(loginResMes.UsersId, id)
-		}
-		fmt.Println(user, "登录成功")
+		//开始通知【单独的写一个方法】
+		up.NotifyMeOnline(userId)
 	}
-	//if loginMes.UserId == 159 && loginMes.UserPwd == "123456" {
-	//	fmt.Println("ID，密码-校验合法。。")
-	//	loginResMes.Code = 200
-	//} else {
-	//	fmt.Println("不合法。。。")
-	//	loginResMes.Code = 500
-	//	loginResMes.Error = "用户不存在，请先注册。。。"
-	//}
-	//序列化-封装
-	loginResMesData, err := json.Marshal(loginResMes)
-	if err != nil {
-		fmt.Println("返回登录数据序列化失败。。。", err)
-	}
-	resMes.Data = string(loginResMesData)
-
-	resMesData, err := json.Marshal(resMes)
-	if err != nil {
-		fmt.Println("返回mes序列化失败")
-	}
-	tf := &util.Transfer{
-		Conn: this.Conn,
-		Buf:  [8096]byte{},
-	}
-	err = tf.WritePkg(resMesData)
-	return
 }
 
-//注册
+func (this *UserProcess) NotifyMeOnline(userId int) {
+
+	//组装我们的NotifyUserStatusMes
+	var mes message.Message
+	mes.Type = message.NotifyUserStatusMesType
+
+	var notifyUserStatusMes message.NotifyUserStatusMes
+	notifyUserStatusMes.UserId = userId
+	notifyUserStatusMes.Status = message.UserOnline
+
+	//将notifyUserStatusMes序列化
+	data, err := json.Marshal(notifyUserStatusMes)
+	if err != nil {
+		fmt.Println("json.Marshal err=", err)
+		return
+	}
+	//将序列化后的notifyUserStatusMes赋值给 mes.Data
+	mes.Data = string(data)
+
+	//对mes再次序列化，准备发送.
+	data, err = json.Marshal(mes)
+	if err != nil {
+		fmt.Println("json.Marshal err=", err)
+		return
+	}
+
+	//发送,创建我们Transfer实例，发送
+	tf := &utils.Transfer{
+		Conn: this.Conn,
+	}
+
+	err = tf.WritePkg(data)
+	if err != nil {
+		fmt.Println("NotifyMeOnline err=", err)
+		return
+	}
+}
+
 func (this *UserProcess) ServerProcessRegister(mes *message.Message) (err error) {
+
 	//1.先从mes 中取出 mes.Data ，并直接反序列化成RegisterMes
 	var registerMes message.RegisterMes
 	err = json.Unmarshal([]byte(mes.Data), &registerMes)
@@ -143,55 +124,74 @@ func (this *UserProcess) ServerProcessRegister(mes *message.Message) (err error)
 
 }
 
-//这里我们编写通知所有在线的用户的方法
-//userId 要通知其它的在线用户，我上线
-func (this *UserProcess) NotifyOthersOnlineUser(userId int) {
+//编写一个函数serverProcessLogin函数， 专门处理登录请求
+func (this *UserProcess) ServerProcessLogin(mes *message.Message) (err error) {
+	//核心代码...
+	//1. 先从mes 中取出 mes.Data ，并直接反序列化成LoginMes
+	var loginMes message.LoginMes
+	err = json.Unmarshal([]byte(mes.Data), &loginMes)
+	if err != nil {
+		fmt.Println("json.Unmarshal fail err=", err)
+		return
+	}
+	//1先声明一个 resMes
+	var resMes message.Message
+	resMes.Type = message.LoginResMesType
+	//2在声明一个 LoginResMes，并完成赋值
+	var loginResMes message.LoginResMes
 
-	//遍历 onlineUsers, 然后一个一个的发送 NotifyUserStatusMes
-	for id, up := range userMgr.onlineUsers {
-		//过滤到自己
-		if id == userId {
-			continue
+	//我们需要到redis数据库去完成验证.
+	//1.使用model.MyUserDao 到redis去验证
+	user, err := model.MyUserDao.Login(loginMes.UserId, loginMes.UserPwd)
+
+	if err != nil {
+
+		if err == model.ERROR_USER_NOTEXISTS {
+			loginResMes.Code = 500
+			loginResMes.Error = err.Error()
+		} else if err == model.ERROR_USER_PWD {
+			loginResMes.Code = 403
+			loginResMes.Error = err.Error()
+		} else {
+			loginResMes.Code = 505
+			loginResMes.Error = "服务器内部错误..."
 		}
-		//开始通知【单独的写一个方法】
-		up.NotifyMeOnline(userId)
+
+	} else {
+		loginResMes.Code = 200
+		//这里，因为用户登录成功，我们就把该登录成功的用放入到userMgr中
+		//将登录成功的用户的userId 赋给 this
+		this.UserId = loginMes.UserId
+		userMgr.AddOnlineUser(this)
+		//通知其它的在线用户， 我上线了
+		this.NotifyOthersOnlineUser(loginMes.UserId)
+		//将当前在线用户的id 放入到loginResMes.UsersId
+		//遍历 userMgr.onlineUsers
+		for id, _ := range userMgr.onlineUsers {
+			loginResMes.UsersId = append(loginResMes.UsersId, id)
+		}
+		fmt.Println(user, "登录成功")
 	}
-}
-
-func (this *UserProcess) NotifyMeOnline(userId int) {
-
-	//组装我们的NotifyUserStatusMes
-	var mes message.Message
-	mes.Type = message.NotifyUserStatusMesType
-
-	var notifyUserStatusMes message.NotifyUserStatusMes
-	notifyUserStatusMes.UserId = userId
-	notifyUserStatusMes.Status = message.UserOnline
-
-	//将notifyUserStatusMes序列化
-	data, err := json.Marshal(notifyUserStatusMes)
+	//3将 loginResMes 序列化
+	data, err := json.Marshal(loginResMes)
 	if err != nil {
-		fmt.Println("json.Marshal err=", err)
-		return
-	}
-	//将序列化后的notifyUserStatusMes赋值给 mes.Data
-	mes.Data = string(data)
-
-	//对mes再次序列化，准备发送.
-	data, err = json.Marshal(mes)
-	if err != nil {
-		fmt.Println("json.Marshal err=", err)
+		fmt.Println("json.Marshal fail", err)
 		return
 	}
 
-	//发送,创建我们Transfer实例，发送
+	//4. 将data 赋值给 resMes
+	resMes.Data = string(data)
+
+	//5. 对resMes 进行序列化，准备发送
+	data, err = json.Marshal(resMes)
+	if err != nil {
+		fmt.Println("json.Marshal fail", err)
+		return
+	}
+	//6. 发送data, 我们将其封装到writePkg函数
 	tf := &utils.Transfer{
 		Conn: this.Conn,
 	}
-
 	err = tf.WritePkg(data)
-	if err != nil {
-		fmt.Println("NotifyMeOnline err=", err)
-		return
-	}
+	return
 }
