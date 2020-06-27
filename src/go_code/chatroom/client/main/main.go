@@ -20,7 +20,7 @@ func main() {
 	var key int
 	//判断是否继续
 	//var loop = true
-	up := &process.UserProcess{}
+
 	for true {
 		fmt.Println("----------------欢迎登陆多人聊天系统------------")
 		fmt.Println("\t\t\t 1 登陆聊天室")
@@ -37,6 +37,7 @@ func main() {
 			fmt.Scanf("%d\n", &userId)
 			fmt.Println("请输入用户的密码")
 			fmt.Scanf("%s\n", &userPwd)
+			up := &process.UserProcess{}
 			up.Login(userId, userPwd)
 			//loop = false
 		case 2:
@@ -47,6 +48,7 @@ func main() {
 			fmt.Scanf("%s\n", &userPwd)
 			fmt.Println("请输入用户的昵称")
 			fmt.Scanf("%s\n", &userName)
+			up := &process.UserProcess{}
 			up.Register(userId, userPwd, userName)
 			//loop = false
 		case 3:

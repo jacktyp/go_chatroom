@@ -1,7 +1,10 @@
 package process
 
 import (
+	"encoding/json"
 	"fmt"
+	utils "go_code/chatroom/client/util"
+	"go_code/chatroom/common/message"
 	"net"
 	"os"
 )
@@ -40,6 +43,34 @@ func ShowMenu() {
 
 }
 
+//和服务器保持通讯
 func serverProcessMes(conn net.Conn) {
+	//创建一个transfer实例, 不停的读取服务器发送的消息
+	tf := &utils.Transfer{
+		Conn: conn,
+	}
+	for {
+		fmt.Println("客户端正在等待读取服务器发送的消息")
+		mes, err := tf.ReadPkg()
+		if err != nil {
+			fmt.Println("tf.ReadPkg err=", err)
+			return
+		}
+		//如果读取到消息，又是下一步处理逻辑
+		switch mes.Type {
+		case message.NotifyUserStatusMesType: // 有人上线了
+			//1. 取出.NotifyUserStatusMes
+			var notifyUserStatusMes message.NotifyUserStatusMes
+			json.Unmarshal([]byte(mes.Data), &notifyUserStatusMes)
+			//2. 把这个用户的信息，状态保存到客户map[int]User中
+			updateUserStatus(&notifyUserStatusMes)
+			//处理
+		case message.SmsMesType: //有人群发消息
+			//outputGroupMes(&mes)
+		default:
+			fmt.Println("服务器端返回了未知的消息类型")
+		}
+		//fmt.Printf("mes=%v\n", mes)
 
+	}
 }

@@ -13,6 +13,12 @@ const (
 	SmsMesType              = "SmsMes"
 )
 
+const (
+	UserOnline = iota
+	UserOffline
+	UserBusyStatus
+)
+
 //传输消息
 type Message struct {
 	//消息类型
@@ -30,8 +36,9 @@ type LoginMes struct {
 
 //登录-状态码和返回错误信息
 type LoginResMes struct {
-	Code  int    `json:"code"`
-	Error string `json:"error"`
+	Code    int    `json:"code"`
+	UsersId []int  // 增加字段，保存用户id的切片
+	Error   string `json:"error"`
 }
 
 type RegisterMes struct {
