@@ -3,7 +3,9 @@ package process
 import (
 	"encoding/json"
 	"fmt"
+	utils "go_code/chatroom/client/util"
 	"go_code/chatroom/common/message"
+	"go_code/chatroom/server/model"
 	util "go_code/chatroom/server/utils"
 	"net"
 )
@@ -31,14 +33,41 @@ func (this *UserProcess) ServerProcessLogin(mes *message.Message) (err error) {
 	var loginResMes message.LoginResMes
 
 	//登录校验
-	if loginMes.UserId == 159 && loginMes.UserPwd == "123456" {
-		fmt.Println("ID，密码-校验合法。。")
-		loginResMes.Code = 200
+	user, err := model.MyUserDao.Login(loginMes.UserId, loginMes.UserPwd)
+	if err != nil {
+		if err == model.ERROR_USER_NOTEXISTS {
+			loginResMes.Code = 500
+			loginResMes.Error = err.Error()
+		} else if err == model.ERROR_USER_PWD {
+			loginResMes.Code = 403
+			loginResMes.Error = err.Error()
+		} else {
+			loginResMes.Code = 505
+			loginResMes.Error = "服务器内部错误..."
+		}
 	} else {
-		fmt.Println("不合法。。。")
-		loginResMes.Code = 500
-		loginResMes.Error = "用户不存在，请先注册。。。"
+		loginResMes.Code = 200
+		//这里，因为用户登录成功，我们就把该登录成功的用放入到userMgr中
+		//将登录成功的用户的userId 赋给 this
+		//this.UserId = loginMes.UserId
+		//userMgr.AddOnlineUser(this)
+		////通知其它的在线用户， 我上线了
+		//this.NotifyOthersOnlineUser(loginMes.UserId)
+		////将当前在线用户的id 放入到loginResMes.UsersId
+		////遍历 userMgr.onlineUsers
+		//for id, _ := range userMgr.onlineUsers {
+		//	loginResMes.UsersId = append(loginResMes.UsersId, id)
+		//}
+		fmt.Println(user, "登录成功")
 	}
+	//if loginMes.UserId == 159 && loginMes.UserPwd == "123456" {
+	//	fmt.Println("ID，密码-校验合法。。")
+	//	loginResMes.Code = 200
+	//} else {
+	//	fmt.Println("不合法。。。")
+	//	loginResMes.Code = 500
+	//	loginResMes.Error = "用户不存在，请先注册。。。"
+	//}
 	//序列化-封装
 	loginResMesData, err := json.Marshal(loginResMes)
 	if err != nil {
@@ -56,4 +85,60 @@ func (this *UserProcess) ServerProcessLogin(mes *message.Message) (err error) {
 	}
 	err = tf.WritePkg(resMesData)
 	return
+}
+
+//注册
+func (this *UserProcess) ServerProcessRegister(mes *message.Message) (err error) {
+	//1.先从mes 中取出 mes.Data ，并直接反序列化成RegisterMes
+	var registerMes message.RegisterMes
+	err = json.Unmarshal([]byte(mes.Data), &registerMes)
+	if err != nil {
+		fmt.Println("json.Unmarshal fail err=", err)
+		return
+	}
+
+	//1先声明一个 resMes
+	var resMes message.Message
+	resMes.Type = message.RegisterResMesType
+	var registerResMes message.RegisterResMes
+
+	//我们需要到redis数据库去完成注册.
+	//1.使用model.MyUserDao 到redis去验证
+	err = model.MyUserDao.Register(&registerMes.User)
+
+	if err != nil {
+		if err == model.ERROR_USER_EXISTS {
+			registerResMes.Code = 505
+			registerResMes.Error = model.ERROR_USER_EXISTS.Error()
+		} else {
+			registerResMes.Code = 506
+			registerResMes.Error = "注册发生未知错误..."
+		}
+	} else {
+		registerResMes.Code = 200
+	}
+
+	data, err := json.Marshal(registerResMes)
+	if err != nil {
+		fmt.Println("json.Marshal fail", err)
+		return
+	}
+
+	//4. 将data 赋值给 resMes
+	resMes.Data = string(data)
+
+	//5. 对resMes 进行序列化，准备发送
+	data, err = json.Marshal(resMes)
+	if err != nil {
+		fmt.Println("json.Marshal fail", err)
+		return
+	}
+	//6. 发送data, 我们将其封装到writePkg函数
+	//因为使用分层模式(mvc), 我们先创建一个Transfer 实例，然后读取
+	tf := &utils.Transfer{
+		Conn: this.Conn,
+	}
+	err = tf.WritePkg(data)
+	return
+
 }

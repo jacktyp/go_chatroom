@@ -38,15 +38,16 @@ func (this *Processor) processAccept() (err error) {
 
 //根据消息类型判断执行
 func (this *Processor) serverProcessByType(mes *message.Message) (err error) {
+	userpro := &userpro.UserProcess{
+		Conn:   this.Conn,
+		UserId: 0,
+	}
 	switch mes.Type {
 	case message.LoginMesType:
-		userpro := &userpro.UserProcess{
-			Conn:   this.Conn,
-			UserId: 0,
-		}
 		err = userpro.ServerProcessLogin(mes)
 	case message.RegisterMesType:
-		fmt.Println("register")
+		//fmt.Println("register")
+		err = userpro.ServerProcessRegister(mes)
 	default:
 		fmt.Println("消息类型不存在。。")
 	}
