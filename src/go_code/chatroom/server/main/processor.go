@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"go_code/chatroom/common/message"
-	userpro "go_code/chatroom/server/process"
+	pro "go_code/chatroom/server/process"
 	"go_code/chatroom/server/utils"
 	"io"
 	"net"
@@ -38,7 +38,7 @@ func (this *Processor) processAccept() (err error) {
 
 //根据消息类型判断执行
 func (this *Processor) serverProcessByType(mes *message.Message) (err error) {
-	userpro := &userpro.UserProcess{
+	userpro := &pro.UserProcess{
 		Conn:   this.Conn,
 		UserId: 0,
 	}
@@ -48,6 +48,11 @@ func (this *Processor) serverProcessByType(mes *message.Message) (err error) {
 	case message.RegisterMesType:
 		//fmt.Println("register")
 		err = userpro.ServerProcessRegister(mes)
+	case message.SmsMesType:
+		//创建一个SmsProcess实例完成转发群聊消息.
+		smspro := &pro.SmsProcess{}
+		smspro.SendGroupMes(mes)
+		//fmt.Println(mes)
 	default:
 		fmt.Println("消息类型不存在。。")
 	}

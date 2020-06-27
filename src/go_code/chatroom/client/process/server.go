@@ -27,11 +27,12 @@ func ShowMenu() {
 	switch key {
 	case 1:
 		//fmt.Println("显示在线用户列表-")
-		//outputOnlineUser()
+		outputOnlineUser()
 	case 2:
 		fmt.Println("你想对大家说的什么:)")
 		fmt.Scanf("%s\n", &content)
-		//smsProcess.SendGroupMes(content)
+		sms := &SmsProcess{}
+		sms.SendGroupMes(content)
 	case 3:
 		fmt.Println("信息列表")
 	case 4:
@@ -56,6 +57,7 @@ func serverProcessMes(conn net.Conn) {
 			fmt.Println("tf.ReadPkg err=", err)
 			return
 		}
+		//fmt.Println("kkkkkk--",mes)
 		//如果读取到消息，又是下一步处理逻辑
 		switch mes.Type {
 		case message.NotifyUserStatusMesType: // 有人上线了
@@ -66,7 +68,8 @@ func serverProcessMes(conn net.Conn) {
 			updateUserStatus(&notifyUserStatusMes)
 			//处理
 		case message.SmsMesType: //有人群发消息
-			//outputGroupMes(&mes)
+			fmt.Println("sms-info...")
+			outputGroupMes(&mes)
 		default:
 			fmt.Println("服务器端返回了未知的消息类型")
 		}

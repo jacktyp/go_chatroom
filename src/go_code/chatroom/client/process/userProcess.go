@@ -61,6 +61,10 @@ func (userProcess *UserProcess) Login(userId int, userPwd string) (err error) {
 
 	//登录成功
 	if loginResMes.Code == 200 {
+		//初始化CurUser
+		CurUser.Conn = conn
+		CurUser.UserId = userId
+		CurUser.UserStatus = common.UserOnline
 		//显示在线用户列表
 		fmt.Println("在线用户列表")
 		for _, v := range loginResMes.UsersId {
